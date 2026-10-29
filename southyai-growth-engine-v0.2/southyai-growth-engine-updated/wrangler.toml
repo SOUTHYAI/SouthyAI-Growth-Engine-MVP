@@ -1,0 +1,14 @@
+name = "southyai-growth-engine"
+main = "src/worker.js"
+compatibility_date = "2026-10-29"
+
+# Create a D1 database, then uncomment and fill in database_id.
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "southyai-growth-engine"
+# database_id = "YOUR_D1_DATABASE_ID"
+
+[vars]
+APP_NAME = "SouthyAI Growth Engine"
+# Optional: set this in Cloudflare Dashboard > Workers & Pages > Settings > Variables.
+# Do not put private API keys in this file.
