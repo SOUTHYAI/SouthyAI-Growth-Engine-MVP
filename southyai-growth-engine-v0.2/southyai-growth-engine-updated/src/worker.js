@@ -16,6 +16,7 @@ const HTML = `
 </nav>
 <main class="wrap">
 <section class="hero"><h1>Make SouthyAI easier to discover.</h1><p>Start with your website. Audit technical SEO, inspect competitor sites, generate marketing drafts, and organise leads. This MVP does not yet buy ads, publish posts, send emails, or render AI videos automatically.</p></section>
+<section class="card wide" id="admin-access" style="margin-top:18px"><h2>Secure admin access</h2><p class="hint">Enter the private ADMIN_API_TOKEN configured as a Cloudflare Worker secret. The token is kept only in this browser tab session and is never written into the public code.</p><label for="adminToken">Admin access token</label><input id="adminToken" type="password" autocomplete="current-password" placeholder="Paste your private admin token"><button class="btn" id="saveAdminTokenBtn">Verify and unlock dashboard</button><button class="btn secondary" id="clearAdminTokenBtn">Lock this session</button><div class="status" id="adminAccessStatus">Admin access is locked until a valid token is verified.</div></section>
 <div class="grid">
 <section class="card wide" id="intelligence"><h2>1. Business intelligence · Website deep-dive</h2><p class="hint">Checks the homepage and a small sample of internal pages, plus robots.txt and sitemap.xml. Only enter a public website you own or have permission to audit.</p>
 <label for="siteUrl">Website URL</label><input id="siteUrl" value="https://southyai.co.za" placeholder="https://example.com">
@@ -56,19 +57,39 @@ const HTML = `
 <script>
 const $ = id => document.getElementById(id);
 async function api(path, body) {
-  const r = await fetch(path, body ? {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)} : {});
+  const token = sessionStorage.getItem("southyai_admin_token") || "";
+  const headers = {};
+  if (body) headers["content-type"] = "application/json";
+  if (token) headers.authorization = "Bearer " + token;
+  const options = { method: body ? "POST" : "GET", headers: headers };
+  if (body) options.body = JSON.stringify(body);
+  const r = await fetch(path, options);
   const data = await r.json().catch(()=>({error:"Unexpected response"}));
-  if(!r.ok) throw new Error(data.error || \`Request failed (\${r.status})\`);
+  if(!r.ok) throw new Error(data.error || "Request failed (" + r.status + ")");
   return data;
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function renderAudit(d, target) {
   $(target).innerHTML = \`<div class="card" style="padding:14px;margin-top:12px"><div class="score">\${d.score}/100</div><div class="mini">Basic technical/content checklist score · \${d.pagesCrawled||1} page(s) crawled · \${d.wordCount} detected words</div><h3>Homepage findings</h3><div class="checks">\${d.checks.map(c=>\`<div class="check"><b class="\${c.ok?'ok':'bad'}">\${c.ok?'✓':'!'} \${esc(c.name)}</b><br>\${esc(c.detail)}</div>\`).join("")}</div><h3>Page details</h3><p><b>Title:</b> \${esc(d.title||"Missing")}<br><b>Description:</b> \${esc(d.description||"Missing")}<br><b>H1:</b> \${esc((d.h1||[]).join(" / ")||"Missing")}<br><b>Internal/external links detected:</b> \${d.linkCount}<br><b>Images detected:</b> \${d.imageCount} (\${d.missingAlt} missing alt text)</p><h3>robots.txt and sitemap</h3><p><b>robots.txt:</b> \${d.crawl?.["/robots.txt"]?.found?"Found":"Not found / inaccessible"} · HTTP \${d.crawl?.["/robots.txt"]?.status||"—"}<br><b>sitemap.xml:</b> \${d.crawl?.["/sitemap.xml"]?.found?"Found":"Not found / inaccessible"} · HTTP \${d.crawl?.["/sitemap.xml"]?.status||"—"}</p>\${d.pages?.length?\`<h3>Sampled internal pages</h3><div class="tablewrap"><table><thead><tr><th>Page</th><th>Title</th><th>Score</th></tr></thead><tbody>\${d.pages.map(p=>\`<tr><td>\${esc(p.url)}</td><td>\${esc(p.title)}</td><td>\${p.score}/100</td></tr>\`).join("")}</tbody></table></div>\`:""}<p class="mini">\${esc(d.note||"")}</p><button class="btn secondary" onclick="downloadJson('southyai-audit.json',window.latestAudit)">Download audit JSON</button></div>\`;
 }
+$("adminToken").value = sessionStorage.getItem("southyai_admin_token") || "";
+$("saveAdminTokenBtn").onclick = async () => {
+  const token = $("adminToken").value.trim();
+  if (!token) { $("adminAccessStatus").textContent = "Paste the admin token first."; return; }
+  sessionStorage.setItem("southyai_admin_token", token);
+  $("adminAccessStatus").textContent = "Checking token…";
+  try { await api("/api/auth/check"); $("adminAccessStatus").textContent = "Verified. Admin functions are unlocked for this browser session."; }
+  catch (e) { sessionStorage.removeItem("southyai_admin_token"); $("adminAccessStatus").textContent = e.message; }
+};
+$("clearAdminTokenBtn").onclick = () => {
+  sessionStorage.removeItem("southyai_admin_token");
+  $("adminToken").value = "";
+  $("adminAccessStatus").textContent = "Session locked. Enter the token again to use admin functions.";
+};
 window.latestAudit = null;
 window.latestVideoBrief = null;
 window.downloadJson = (name,data) => {const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download=name;a.click();URL.revokeObjectURL(a.href);};
-async function statusCheck(){try{const d=await api("/api/health");$("apiStatus").textContent=\`Service online · v\${d.version}\${d.databaseConnected?" · D1 connected":" · D1 not connected"}\`;}catch{$("apiStatus").textContent="Service check failed";}}
+async function statusCheck(){try{const d=await api("/api/health");$("apiStatus").textContent="Service online · v"+d.version+(d.databaseConnected?" · D1 connected":" · D1 not connected")+(d.adminAuthConfigured?" · Admin lock enabled":" · ADMIN_API_TOKEN missing");}catch{$("apiStatus").textContent="Service check failed";}}
 $("auditBtn").onclick=async()=>{const b=$("auditBtn");b.disabled=true;$("auditStatus").textContent="Crawling a small sample of public pages…";$("auditResults").innerHTML="";try{const d=await api("/api/audit",{url:$("siteUrl").value.trim()});window.latestAudit=d;renderAudit(d,"auditResults");$("auditStatus").textContent="Audit complete.";}catch(e){$("auditStatus").textContent=e.message;}finally{b.disabled=false;}};
 $("competitorBtn").onclick=async()=>{const b=$("competitorBtn");b.disabled=true;$("competitorStatus").textContent="Auditing public competitor page…";$("competitorResults").innerHTML="";try{const d=await api("/api/audit",{url:$("competitorUrl").value.trim()});$("competitorResults").innerHTML=\`<div class="output"><b>\${esc(d.url)}</b><br>Score: \${d.score}/100<br>Title: \${esc(d.title||"Missing")}<br>Description: \${esc(d.description||"Missing")}<br>H1: \${esc((d.h1||[]).join(" / ")||"Missing")}<br>Detected words: \${d.wordCount}<br><br>Compare this with your own audit. This does not assess their private sales, actual revenue, or Google rankings.</div>\`;$("competitorStatus").textContent="Competitor audit complete.";}catch(e){$("competitorStatus").textContent=e.message;}finally{b.disabled=false;}};
 $("contentBtn").onclick=async()=>{const b=$("contentBtn");b.disabled=true;$("contentStatus").textContent="Preparing campaign drafts…";$("contentResults").innerHTML="";try{const d=await api("/api/content",{business:"SouthyAI Technologies",service:$("service").value,audience:$("audience").value,offer:$("offer").value,tone:"professional and human"});$("contentResults").innerHTML=Object.entries(d).map(([k,v])=>\`<h3>\${esc(k.replace(/([A-Z])/g," $1"))}</h3><div class="output">\${esc(v)}</div><button class="btn secondary" onclick="copyText(\${JSON.stringify(v).replace(/</g,"\\\\u003c")})">Copy draft</button>\`).join("");$("contentStatus").textContent="Drafts generated. Review claims and personalise before use.";}catch(e){$("contentStatus").textContent=e.message;}finally{b.disabled=false;}};
@@ -100,15 +121,47 @@ statusCheck();
 function json(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin", "x-frame-options": "DENY" }
   });
+}
+function isPrivateIPv4(host) {
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return false;
+  const p=host.split(".").map(Number);
+  if(p.some(n=>n<0||n>255)) return true;
+  const a=p[0],b=p[1],c=p[2];
+  return a===0||a===10||a===127||a>=224||(a===100&&b>=64&&b<=127)||(a===169&&b===254)||(a===172&&b>=16&&b<=31)||(a===192&&(b===168||(b===0&&(c===0||c===2))))||(a===198&&(b===18||b===19||(b===51&&c===100)))||(a===203&&b===0&&c===113);
+}
+function isPrivateIPv6(host) {
+  const x=host.toLowerCase().replace(/^\[|\]$/g,"");
+  if(x.includes("%")) return true;
+  const first=parseInt(x.split(":")[0]||"0",16);
+  if(!Number.isFinite(first)||first<0x2000||first>0x3fff) return true;
+  return x.startsWith("2001:db8:")||x.startsWith("2001:10:")||x.startsWith("2001:20:");
 }
 function safeUrl(input) {
   let u;
-  try { u = new URL(input); } catch { throw new Error("Enter a valid full URL, e.g. https://southyai.co.za"); }
-  if (!["http:", "https:"].includes(u.protocol)) throw new Error("Only http and https URLs are supported.");
-  if (u.username || u.password) throw new Error("URLs containing credentials are not allowed.");
+  try { u=new URL(input); } catch { throw new Error("Enter a valid full URL, e.g. https://southyai.co.za"); }
+  if(!["http:","https:"].includes(u.protocol)) throw new Error("Only http and https URLs are supported.");
+  if(u.username||u.password) throw new Error("URLs containing credentials are not allowed.");
+  const host=u.hostname.toLowerCase().replace(/^\[|\]$/g,"");
+  if(!host||host==="localhost"||host.endsWith(".localhost")||host.endsWith(".local")||host.endsWith(".internal")||host.endsWith(".test")||host.endsWith(".invalid")||host==="metadata.google.internal"||host==="instance-data") throw new Error("Private, local and reserved hostnames cannot be audited.");
+  if(host.includes(":")&&isPrivateIPv6(host)) throw new Error("Private or reserved IP addresses cannot be audited.");
+  if(isPrivateIPv4(host)) throw new Error("Private or reserved IP addresses cannot be audited.");
   return u;
+}
+async function assertPublicDns(host) {
+  const name=host.toLowerCase().replace(/^\[|\]$/g,"");
+  if(name.includes(":")||/^\d{1,3}(?:\.\d{1,3}){3}$/.test(name)) return;
+  const ips=[];
+  for(const type of ["A","AAAA"]) {
+    const r=await fetch("https://cloudflare-dns.com/dns-query?name="+encodeURIComponent(name)+"&type="+type,{headers:{accept:"application/dns-json"},signal:AbortSignal.timeout(5000)});
+    if(!r.ok) throw new Error("Could not safely verify the website DNS records. Try again later.");
+    const d=await r.json();
+    if(d.Status!==0) throw new Error("The website hostname could not be safely resolved.");
+    for(const answer of (d.Answer||[])) if(answer.type===1||answer.type===28) ips.push(String(answer.data||"").toLowerCase());
+  }
+  if(!ips.length) throw new Error("The website hostname did not resolve to a public IP address.");
+  if(ips.some(ip=>ip.includes(":")?isPrivateIPv6(ip):isPrivateIPv4(ip))) throw new Error("The website resolves to a private or reserved IP address and was blocked.");
 }
 function stripHtml(html) {
   return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
@@ -129,15 +182,21 @@ function absoluteLink(href, base) {
   try { const u = new URL(href, base); if (u.protocol === "http:" || u.protocol === "https:") return u.href; } catch {}
   return null;
 }
-async function fetchPage(url) {
-  const res = await fetch(url.href, {
-    headers: { "user-agent": "SouthyAI-GrowthEngine/0.1 (+site audit; respects robots.txt where available)", "accept": "text/html,application/xhtml+xml,text/plain;q=0.8,*/*;q=0.5" },
-    redirect: "follow",
-    signal: AbortSignal.timeout(12000)
-  });
-  const type = res.headers.get("content-type") || "";
-  const body = await res.text();
-  return { res, type, body, finalUrl: res.url || url.href };
+async function fetchPage(inputUrl) {
+  let current=safeUrl(inputUrl.href),res;
+  for(let hop=0;hop<=5;hop++) {
+    await assertPublicDns(current.hostname);
+    res=await fetch(current.href,{headers:{"user-agent":"SouthyAI-GrowthEngine/0.1 (public-site audit)","accept":"text/html,application/xhtml+xml,text/plain;q=0.8,*/*;q=0.5"},redirect:"manual",signal:AbortSignal.timeout(12000)});
+    if(![301,302,303,307,308].includes(res.status)) break;
+    const loc=res.headers.get("location");
+    if(!loc) break;
+    if(hop===5) throw new Error("The website redirected too many times.");
+    const next=safeUrl(new URL(loc,current.href).href);
+    try{if(res.body) await res.body.cancel();}catch{}
+    current=next;
+  }
+  const type=res.headers.get("content-type")||"",body=await res.text();
+  return {res,type,body,finalUrl:current.href};
 }
 function auditHtml(html, url, status, contentType) {
   const title = (html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i) || [,""])[1].replace(/<[^>]*>/g, "").trim();
@@ -176,9 +235,9 @@ async function auditWebsite(input, env) {
   const origin = new URL(finalUrl).origin;
   for (const path of ["/robots.txt", "/sitemap.xml"]) {
     try {
-      const r = await fetch(new URL(path, origin), { headers: { "user-agent": "SouthyAI-GrowthEngine/0.1" }, signal: AbortSignal.timeout(8000) });
-      const txt = await r.text();
-      result.crawl[path] = { status: r.status, found: r.ok, preview: txt.slice(0, 1600) };
+      const fetched=await fetchPage(new URL(path,origin));
+      const txt=fetched.body;
+      result.crawl[path]={status:fetched.res.status,found:fetched.res.ok,preview:txt.slice(0,1600)};
     } catch (e) { result.crawl[path] = { status: 0, found: false, preview: e.message }; }
   }
   // Crawl a small same-origin sample only. No login pages, forms, or non-HTML links are followed.
@@ -187,11 +246,10 @@ async function auditWebsite(input, env) {
   for (const link of internal) {
     if (link === result.url || link === finalUrl) continue;
     try {
-      const r = await fetch(link, { headers: { "user-agent": "SouthyAI-GrowthEngine/0.1", "accept": "text/html" }, redirect: "follow", signal: AbortSignal.timeout(8000) });
-      const ct = r.headers.get("content-type") || "";
-      if (!r.ok || !ct.includes("html")) continue;
-      const h = await r.text();
-      const page = auditHtml(h, new URL(r.url || link), r.status, ct);
+      const fetched=await fetchPage(new URL(link));
+      const ct=fetched.type;
+      if(!fetched.res.ok||!ct.includes("html")) continue;
+      const page=auditHtml(fetched.body,new URL(fetched.finalUrl),fetched.res.status,ct);
       pages.push({ url: page.url, status: page.status, title: page.title, description: page.description, h1: page.h1, score: page.score, wordCount: page.wordCount });
     } catch {}
   }
@@ -216,9 +274,22 @@ function campaignDraft(body) {
     email: `Subject: A possible customer support partnership\\n\\nHello [Name],\\n\\nI’m reaching out from ${business}. We support businesses looking for ${service}.\\n\\nI thought this might be relevant to ${audience}. Would you be open to a short conversation about your current support needs and whether a small pilot could make sense?\\n\\nBest regards,\\nSouthyAI Technologies\\nsupport@southyai.co.za\\nhttps://southyai.co.za\\n\\nPlease personalise this message and confirm the recipient is an appropriate business contact before sending.`
   };
 }
+function constantTimeEqual(a,b) {
+  if(a.length!==b.length) return false;
+  let diff=0;
+  for(let i=0;i<a.length;i++) diff|=a.charCodeAt(i)^b.charCodeAt(i);
+  return diff===0;
+}
 async function handle(req, env) {
   const url = new URL(req.url);
-  if (req.method === "GET" && url.pathname === "/api/health") return json({ ok: true, app: env.APP_NAME || "SouthyAI Growth Engine", version: "0.1.0", databaseConnected: !!env.DB });
+  if(req.method==="GET"&&url.pathname==="/api/health") return json({ok:true,app:env.APP_NAME||"SouthyAI Growth Engine",version:"0.1.1",databaseConnected:!!env.DB,adminAuthConfigured:!!env.ADMIN_API_TOKEN});
+  if(url.pathname.startsWith("/api/")) {
+    const configured=String(env.ADMIN_API_TOKEN||"");
+    if(configured.length<32) return json({error:"Admin API is locked. Configure ADMIN_API_TOKEN as a Worker secret with at least 32 characters."},503);
+    const supplied=(req.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");
+    if(!constantTimeEqual(supplied,configured)) return json({error:"Unauthorised. Enter the valid admin access token."},401);
+  }
+  if(req.method==="GET"&&url.pathname==="/api/auth/check") return json({ok:true,authenticated:true});
   if (req.method === "POST" && url.pathname === "/api/audit") {
     try {
       const body = await req.json();
@@ -251,12 +322,12 @@ async function handle(req, env) {
     try { const { results } = await env.DB.prepare("SELECT * FROM leads ORDER BY id DESC LIMIT 200").all(); return json({ leads: results || [] }); }
     catch { return json({ error: "Lead table missing. Run schema.sql in D1." }, 503); }
   }
-  if (req.method === "GET" && url.pathname === "/") return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
+  if (req.method === "GET" && url.pathname === "/") return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin", "x-frame-options": "DENY", "permissions-policy": "camera=(), microphone=(), geolocation=()" } });
   return json({ error: "Not found" }, 404);
 }
 export default {
   async fetch(request, env) {
-    if (request.method === "OPTIONS") return new Response(null, { headers: { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,OPTIONS", "access-control-allow-headers": "content-type" } });
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "allow": "GET,POST,OPTIONS", "cache-control": "no-store" } });
     try { return await handle(request, env); }
     catch (e) { return json({ error: "Unexpected error", detail: e.message }, 500); }
   }
