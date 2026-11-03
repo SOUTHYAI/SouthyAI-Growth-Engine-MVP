@@ -1,12 +1,11 @@
-name = "southyai-growth-engine"
+name = "southyai-growth-engine-mvp"
 main = "src/worker.js"
 compatibility_date = "2026-10-29"
 
-# Create a D1 database, then uncomment and fill in database_id.
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "southyai-growth-engine"
-# database_id = "YOUR_D1_DATABASE_ID"
+[[d1_databases]]
+binding = "DB"
+database_name = "southyai-growth-engine"
+database_id = "e2ec1886-ae53-4dee-b1f5-857d1b56b041"
 
 [vars]
 APP_NAME = "SouthyAI Growth Engine"
