@@ -38,12 +38,15 @@ const HTML = `
 <label for="leadNotes">Notes / potential need</label><textarea id="leadNotes" placeholder="Why this prospect may need SouthyAI"></textarea>
 <button class="btn" id="saveLeadBtn">Save lead</button><div id="leadStatus" class="status"></div><button class="btn secondary" id="loadLeadsBtn">Load saved leads</button><div id="leadsResults" class="results"></div></section>
 <section class="card" id="history"><h2>5. Saved audit history</h2><p class="hint">Connect Cloudflare D1 and run the included database schema to save reports and leads between sessions.</p><button class="btn secondary" id="historyBtn">Load audit history</button><div id="historyStatus" class="status"></div><div id="historyResults"></div></section>
-<section class="card wide" id="video-studio"><h2>8. SouthyAI Video Studio</h2><p class="hint">Create a branded video concept, script and scene-by-scene storyboard, then export the production brief. Actual video rendering is not enabled yet; it will require a connected video-generation service.</p>
-<div class="grid" style="margin-top:0">
-<div><label for="videoBrand">Business / brand</label><input id="videoBrand" value="SouthyAI Technologies"><label for="videoProduct">Product or service</label><textarea id="videoProduct">Remote customer service and technical support for international businesses, delivered by trained remote agents.</textarea><label for="videoAudience">Target audience</label><input id="videoAudience" value="International companies seeking reliable customer support"><label for="videoGoal">Ad objective</label><select id="videoGoal"><option value="book a discovery call">Book a discovery call</option><option value="request a pilot">Request a pilot</option><option value="raise brand awareness">Raise brand awareness</option><option value="request a voice API demo">Request a voice API demo</option></select></div>
-<div><label for="videoFormat">Video format</label><select id="videoFormat"><option value="Vertical 9:16 social video">Vertical 9:16 social video</option><option value="Square 1:1 social video">Square 1:1 social video</option><option value="Landscape 16:9 website or YouTube video">Landscape 16:9 website or YouTube video</option></select><label for="videoStyle">Creative style</label><select id="videoStyle"><option>Professional AI presenter</option><option>Product/service showcase</option><option>Founder-led corporate advert</option><option>Customer problem and solution</option></select><label for="videoTone">Tone</label><select id="videoTone"><option>Confident, warm and professional</option><option>Bold and energetic</option><option>Human, local and proudly South African</option><option>Premium enterprise</option></select><label for="videoLength">Target duration</label><select id="videoLength"><option value="15 seconds">15 seconds</option><option value="30 seconds" selected>30 seconds</option><option value="45 seconds">45 seconds</option><option value="60 seconds">60 seconds</option></select></div></div>
-<button class="btn" id="videoBriefBtn">Create video concept & storyboard</button><button class="btn secondary" id="videoDownloadBtn" disabled>Download production brief</button><div id="videoStatus" class="status" aria-live="polite"></div><div id="videoResults"></div>
-<div class="check" style="margin-top:14px"><b>Rendering status: Provider not connected</b><br>Once connected, this studio can send the approved brief to an AI video API for rendering. Keep API keys in Cloudflare secrets, never in this page.</div></section>
+<section class="card wide" id="video-studio"><h2>8. SouthyAI One-Prompt Video Studio</h2><p class="hint">Describe the advert once. SouthyAI sends it to the video engine to create a finished video with an AI presenter, voice and scenes. Portrait video, up to 60 seconds. Generation requires the video service to be connected.</p>
+<label for="videoPrompt">What video should we create?</label><textarea id="videoPrompt" style="min-height:125px" placeholder="Example: Create a cinematic 60-second advert for a modern bank. Show a friendly AI banking assistant helping customers, with a professional presenter, warm lighting and a clear invitation to learn more."></textarea>
+<div class="grid" style="margin-top:4px">
+<div><label for="videoAvatar">AI presenter</label><select id="videoAvatar"><option value="auto">Let SouthyAI choose</option><option>Adriana SuitSofa Front</option><option>Alex in Black Suit</option><option>Judy Suit Front</option><option>Brandon in Grey Suit</option><option>Yola Business Front</option><option>Justo CustomerService Front</option><option>Caroline in Blue Suit</option><option>Ivan in Black Suit</option></select>
+<label for="videoAccent">Voice accent</label><select id="videoAccent"><option value="South African English">South African English</option><option value="British English (UK)">British English (UK)</option><option value="American English (US)">American English (US)</option><option value="Neutral international English">Neutral international English</option></select></div>
+<div><label for="videoOrientation">Video format</label><select id="videoOrientation"><option value="portrait" selected>Portrait 9:16 · Facebook / LinkedIn</option><option value="landscape">Landscape 16:9</option></select>
+<label for="videoDuration">Duration</label><select id="videoDuration"><option value="60" selected>Up to 60 seconds</option><option value="30">30 seconds</option></select>
+<label for="videoImage">Upload an image (optional)</label><input id="videoImage" type="file" accept="image/png,image/jpeg,image/webp"><div id="videoImageName" class="mini">No image uploaded — the video engine will create visuals from your prompt.</div></div></div>
+<button class="btn" id="videoGenerateBtn">Generate my video</button><div id="videoStatus" class="status" aria-live="polite">Ready when you are. Video generation uses paid provider credits.</div><div id="videoResults"></div></section>
 <section class="card wide"><h2>What still needs connecting</h2><div class="checks">
 <div class="check"><b>Website crawler</b><br>Included: homepage + up to 7 same-domain HTML links.</div>
 <div class="check"><b>AI reasoning / competitor discovery</b><br>Needs an AI/search provider and secure API key.</div>
@@ -111,7 +114,34 @@ const makeVideoBrief = () => {
  return {brand,product,audience,objective:goal,format,style,tone,targetDuration:length,script,scenes,visualPrompt:\`Create a \${format}, \${length} \${style.toLowerCase()} advertisement for \${brand}. Tone: \${tone}. Audience: \${audience}. Service: \${product}. Use authentic professional business visuals, readable captions, clean scene transitions, clear audio, and a final call to action to \${goal}. Do not invent customer testimonials, statistics, awards, certifications or guarantees.\`,status:"Production brief only — AI video rendering provider not connected."};
 };
 $("videoBriefBtn").onclick=()=>{const brief=makeVideoBrief();window.latestVideoBrief=brief;$("videoDownloadBtn").disabled=false;$("videoStatus").textContent="Concept and storyboard ready. Review every claim before production.";$("videoResults").innerHTML=\`<div class="output"><h3>Ad script</h3>\${esc(brief.script)}<h3>Scene-by-scene storyboard</h3>\${brief.scenes.map(s=>\`<p><b>\${esc(s.time)}</b><br><b>Visual:</b> \${esc(s.visual)}<br><b>Voiceover:</b> \${esc(s.voiceover)}</p>\`).join("")}<h3>AI video generation prompt</h3>\${esc(brief.visualPrompt)}<p class="mini">Format: \${esc(brief.format)} · Duration: \${esc(brief.targetDuration)} · \${esc(brief.status)}</p><button class="btn secondary" id="copyVideoScript">Copy script</button><button class="btn secondary" id="copyVideoPrompt">Copy visual prompt</button></div>\`;$("copyVideoScript").onclick=()=>copyText(brief.script);$("copyVideoPrompt").onclick=()=>copyText(brief.visualPrompt);};
-$("videoDownloadBtn").onclick=()=>{if(window.latestVideoBrief)downloadJson("southyai-video-production-brief.json",window.latestVideoBrief);};
+const videoFileToDataUrl = file => new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Could not read the uploaded image."));reader.readAsDataURL(file);});
+$("videoImage").onchange=()=>{$("videoImageName").textContent=$("videoImage").files[0] ? $("videoImage").files[0].name : "No image uploaded — the video engine will create visuals from your prompt.";};
+$("videoGenerateBtn").onclick=async()=>{
+ const btn=$("videoGenerateBtn"), prompt=$("videoPrompt").value.trim(), file=$("videoImage").files[0];
+ if(!prompt){$("videoStatus").textContent="Please describe the video first.";return;}
+ if(file && (!/^image\/(png|jpeg|webp)$/.test(file.type)||file.size>5*1024*1024)){$("videoStatus").textContent="Use a PNG, JPG or WebP image smaller than 5 MB.";return;}
+ btn.disabled=true;$("videoResults").innerHTML="";$("videoStatus").textContent="Sending your video brief to the generation engine…";
+ try{
+  const imageData=file?await videoFileToDataUrl(file):undefined;
+  const started=await api("/api/video/generate",{prompt,avatar:$("videoAvatar").value,accent:$("videoAccent").value,orientation:$("videoOrientation").value,duration:$("videoDuration").value,imageData});
+  $("videoStatus").textContent="Video accepted and queued. SouthyAI is creating it now…";
+  let done=false;
+  for(let i=0;i<120;i++){
+   await new Promise(resolve=>setTimeout(resolve,5000));
+   const state=await api("/api/video/status?request_id="+encodeURIComponent(started.requestId));
+   if(state.status==="COMPLETED"&&state.videoUrl){
+    $("videoStatus").textContent="Your video is ready!";
+    $("videoResults").innerHTML='<div class="output"><video controls playsinline style="width:100%;max-width:420px;border-radius:12px" src="'+esc(state.videoUrl)+'"></video><p><a href="'+esc(state.videoUrl)+'" target="_blank" rel="noopener">Open or download your MP4 video</a></p></div>';
+    done=true;break;
+   }
+   if(state.status==="FAILED"||state.status==="CANCELLED")throw new Error("Video generation failed. Please try again with a simpler prompt.");
+   $("videoStatus").textContent="Your video is rendering… Status: "+state.status+". This can take a few minutes.";
+  }
+  if(!done)$("videoStatus").textContent="Your video is still processing. Please come back and try again shortly; your generation request was submitted.";
+ }catch(e){$("videoStatus").textContent=e.message||"Video generation could not be completed.";}
+ finally{btn.disabled=false;}
+};
+
 
 statusCheck();
 </script></body></html>
@@ -299,6 +329,53 @@ async function handle(req, env) {
   }
   if (req.method === "POST" && url.pathname === "/api/content") {
     try { return json(campaignDraft(await req.json())); } catch (e) { return json({ error: e.message }, 400); }
+  }
+  if (req.method === "POST" && url.pathname === "/api/video/generate") {
+    if (!env.FAL_KEY) return json({ error: "Video generation is not connected yet. Add FAL_KEY as a Cloudflare Worker secret first." }, 503);
+    try {
+      const b = await req.json();
+      const userPrompt = String(b.prompt || "").trim();
+      if (!userPrompt) return json({ error: "Describe the video you want first." }, 400);
+      if (userPrompt.length > 3000) return json({ error: "Please keep the video description under 3,000 characters." }, 400);
+      const duration = b.duration === "30" ? 30 : 60;
+      const accent = ["South African English","British English (UK)","American English (US)","Neutral international English"].includes(b.accent) ? b.accent : "South African English";
+      const orientation = b.orientation === "landscape" ? "landscape" : "portrait";
+      const avatar = String(b.avatar || "auto").slice(0,100);
+      let prompt = "Create a polished, cinematic business marketing video, target duration about " + duration + " seconds. Output orientation: " + orientation + ". Spoken narration must use a " + accent + " accent. Use a natural human-like AI presenter with realistic facial expressions and accurate lip sync. Include relevant cinematic B-roll, smooth scene transitions, readable on-screen captions, professional lighting, tasteful background music, and a clear closing call to action. The video should feel suitable for a professional Facebook or LinkedIn business advert. User brief: " + userPrompt;
+      const input = { prompt, config: { avatar, voice: "auto", orientation } };
+      if (typeof b.imageData === "string" && b.imageData.startsWith("data:image/")) {
+        if (b.imageData.length > 7 * 1024 * 1024) return json({ error: "Please upload an image smaller than 5 MB." }, 413);
+        input.file_urls = [b.imageData];
+      }
+      const r = await fetch("https://queue.fal.run/fal-ai/heygen/v3/video-agent", {
+        method: "POST",
+        headers: { "Authorization": "Key " + env.FAL_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+        signal: AbortSignal.timeout(20000)
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) return json({ error: data.detail || data.message || "The video provider could not accept the request.", providerStatus: r.status }, 502);
+      if (!data.request_id) return json({ error: "The video provider did not return a generation ID." }, 502);
+      return json({ ok: true, requestId: data.request_id, status: "IN_QUEUE", message: "Your video is in the generation queue." }, 202);
+    } catch (e) { return json({ error: e.name === "TimeoutError" ? "The video provider took too long to respond. Please try again." : (e.message || "Could not start video generation.") }, 502); }
+  }
+  if (req.method === "GET" && url.pathname === "/api/video/status") {
+    if (!env.FAL_KEY) return json({ error: "Video generation is not connected. Add FAL_KEY as a Cloudflare Worker secret." }, 503);
+    const requestId = url.searchParams.get("request_id") || "";
+    if (!/^[a-zA-Z0-9-]{8,100}$/.test(requestId)) return json({ error: "A valid video request ID is required." }, 400);
+    try {
+      const base = "https://queue.fal.run/fal-ai/heygen/v3/video-agent/requests/" + encodeURIComponent(requestId);
+      const s = await fetch(base + "/status", { headers: { "Authorization": "Key " + env.FAL_KEY }, signal: AbortSignal.timeout(12000) });
+      const statusData = await s.json().catch(() => ({}));
+      if (!s.ok) return json({ error: statusData.detail || "Could not check video status." }, 502);
+      if (statusData.status !== "COMPLETED") return json({ status: statusData.status || "IN_PROGRESS", logs: statusData.logs || [] });
+      const r = await fetch(base, { headers: { "Authorization": "Key " + env.FAL_KEY }, signal: AbortSignal.timeout(15000) });
+      const result = await r.json().catch(() => ({}));
+      if (!r.ok) return json({ error: result.detail || "Video finished but its download link could not be retrieved." }, 502);
+      const videoUrl = result.video?.url || result.data?.video?.url;
+      if (!videoUrl) return json({ error: "The provider completed the job but returned no video file." }, 502);
+      return json({ status: "COMPLETED", videoUrl });
+    } catch (e) { return json({ error: e.message || "Could not retrieve video status." }, 502); }
   }
   if (req.method === "GET" && url.pathname === "/api/audits") {
     if (!env.DB) return json({ error: "D1 is not connected yet. The dashboard works, but saving reports needs D1." }, 503);
