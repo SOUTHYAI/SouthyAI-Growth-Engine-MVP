@@ -15,6 +15,7 @@
 </nav>
 <main class="wrap">
 <section class="hero"><h1>Make SouthyAI easier to discover.</h1><p>Start with your website. Audit technical SEO, inspect competitor sites, generate marketing drafts, and organise leads. This MVP does not yet buy ads, publish posts, send emails, or render AI videos automatically.</p></section>
+<section class="card wide" id="admin-access" style="margin-top:18px"><h2>Secure admin access</h2><p class="hint">Enter the private ADMIN_API_TOKEN configured as a Cloudflare Worker secret. The token is kept only in this browser tab session and is never written into the public code.</p><label for="adminToken">Admin access token</label><input id="adminToken" type="password" autocomplete="current-password" placeholder="Paste your private admin token"><button class="btn" id="saveAdminTokenBtn">Verify and unlock dashboard</button><button class="btn secondary" id="clearAdminTokenBtn">Lock this session</button><div class="status" id="adminAccessStatus">Admin access is locked until a valid token is verified.</div></section>
 <div class="grid">
 <section class="card wide" id="intelligence"><h2>1. Business intelligence · Website deep-dive</h2><p class="hint">Checks the homepage and a small sample of internal pages, plus robots.txt and sitemap.xml. Only enter a public website you own or have permission to audit.</p>
 <label for="siteUrl">Website URL</label><input id="siteUrl" value="https://southyai.co.za" placeholder="https://example.com">
@@ -55,19 +56,39 @@
 <script>
 const $ = id => document.getElementById(id);
 async function api(path, body) {
-  const r = await fetch(path, body ? {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)} : {});
+  const token = sessionStorage.getItem("southyai_admin_token") || "";
+  const headers = {};
+  if (body) headers["content-type"] = "application/json";
+  if (token) headers.authorization = "Bearer " + token;
+  const options = { method: body ? "POST" : "GET", headers: headers };
+  if (body) options.body = JSON.stringify(body);
+  const r = await fetch(path, options);
   const data = await r.json().catch(()=>({error:"Unexpected response"}));
-  if(!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
+  if(!r.ok) throw new Error(data.error || "Request failed (" + r.status + ")");
   return data;
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function renderAudit(d, target) {
   $(target).innerHTML = `<div class="card" style="padding:14px;margin-top:12px"><div class="score">${d.score}/100</div><div class="mini">Basic technical/content checklist score · ${d.pagesCrawled||1} page(s) crawled · ${d.wordCount} detected words</div><h3>Homepage findings</h3><div class="checks">${d.checks.map(c=>`<div class="check"><b class="${c.ok?'ok':'bad'}">${c.ok?'✓':'!'} ${esc(c.name)}</b><br>${esc(c.detail)}</div>`).join("")}</div><h3>Page details</h3><p><b>Title:</b> ${esc(d.title||"Missing")}<br><b>Description:</b> ${esc(d.description||"Missing")}<br><b>H1:</b> ${esc((d.h1||[]).join(" / ")||"Missing")}<br><b>Internal/external links detected:</b> ${d.linkCount}<br><b>Images detected:</b> ${d.imageCount} (${d.missingAlt} missing alt text)</p><h3>robots.txt and sitemap</h3><p><b>robots.txt:</b> ${d.crawl?.["/robots.txt"]?.found?"Found":"Not found / inaccessible"} · HTTP ${d.crawl?.["/robots.txt"]?.status||"—"}<br><b>sitemap.xml:</b> ${d.crawl?.["/sitemap.xml"]?.found?"Found":"Not found / inaccessible"} · HTTP ${d.crawl?.["/sitemap.xml"]?.status||"—"}</p>${d.pages?.length?`<h3>Sampled internal pages</h3><div class="tablewrap"><table><thead><tr><th>Page</th><th>Title</th><th>Score</th></tr></thead><tbody>${d.pages.map(p=>`<tr><td>${esc(p.url)}</td><td>${esc(p.title)}</td><td>${p.score}/100</td></tr>`).join("")}</tbody></table></div>`:""}<p class="mini">${esc(d.note||"")}</p><button class="btn secondary" onclick="downloadJson('southyai-audit.json',window.latestAudit)">Download audit JSON</button></div>`;
 }
+$("adminToken").value = sessionStorage.getItem("southyai_admin_token") || "";
+$("saveAdminTokenBtn").onclick = async () => {
+  const token = $("adminToken").value.trim();
+  if (!token) { $("adminAccessStatus").textContent = "Paste the admin token first."; return; }
+  sessionStorage.setItem("southyai_admin_token", token);
+  $("adminAccessStatus").textContent = "Checking token…";
+  try { await api("/api/auth/check"); $("adminAccessStatus").textContent = "Verified. Admin functions are unlocked for this browser session."; }
+  catch (e) { sessionStorage.removeItem("southyai_admin_token"); $("adminAccessStatus").textContent = e.message; }
+};
+$("clearAdminTokenBtn").onclick = () => {
+  sessionStorage.removeItem("southyai_admin_token");
+  $("adminToken").value = "";
+  $("adminAccessStatus").textContent = "Session locked. Enter the token again to use admin functions.";
+};
 window.latestAudit = null;
 window.latestVideoBrief = null;
 window.downloadJson = (name,data) => {const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download=name;a.click();URL.revokeObjectURL(a.href);};
-async function statusCheck(){try{const d=await api("/api/health");$("apiStatus").textContent=`Service online · v${d.version}${d.databaseConnected?" · D1 connected":" · D1 not connected"}`;}catch{$("apiStatus").textContent="Service check failed";}}
+async function statusCheck(){try{const d=await api("/api/health");$("apiStatus").textContent="Service online · v"+d.version+(d.databaseConnected?" · D1 connected":" · D1 not connected")+(d.adminAuthConfigured?" · Admin lock enabled":" · ADMIN_API_TOKEN missing");}catch{$("apiStatus").textContent="Service check failed";}}
 $("auditBtn").onclick=async()=>{const b=$("auditBtn");b.disabled=true;$("auditStatus").textContent="Crawling a small sample of public pages…";$("auditResults").innerHTML="";try{const d=await api("/api/audit",{url:$("siteUrl").value.trim()});window.latestAudit=d;renderAudit(d,"auditResults");$("auditStatus").textContent="Audit complete.";}catch(e){$("auditStatus").textContent=e.message;}finally{b.disabled=false;}};
 $("competitorBtn").onclick=async()=>{const b=$("competitorBtn");b.disabled=true;$("competitorStatus").textContent="Auditing public competitor page…";$("competitorResults").innerHTML="";try{const d=await api("/api/audit",{url:$("competitorUrl").value.trim()});$("competitorResults").innerHTML=`<div class="output"><b>${esc(d.url)}</b><br>Score: ${d.score}/100<br>Title: ${esc(d.title||"Missing")}<br>Description: ${esc(d.description||"Missing")}<br>H1: ${esc((d.h1||[]).join(" / ")||"Missing")}<br>Detected words: ${d.wordCount}<br><br>Compare this with your own audit. This does not assess their private sales, actual revenue, or Google rankings.</div>`;$("competitorStatus").textContent="Competitor audit complete.";}catch(e){$("competitorStatus").textContent=e.message;}finally{b.disabled=false;}};
 $("contentBtn").onclick=async()=>{const b=$("contentBtn");b.disabled=true;$("contentStatus").textContent="Preparing campaign drafts…";$("contentResults").innerHTML="";try{const d=await api("/api/content",{business:"SouthyAI Technologies",service:$("service").value,audience:$("audience").value,offer:$("offer").value,tone:"professional and human"});$("contentResults").innerHTML=Object.entries(d).map(([k,v])=>`<h3>${esc(k.replace(/([A-Z])/g," $1"))}</h3><div class="output">${esc(v)}</div><button class="btn secondary" onclick="copyText(${JSON.stringify(v).replace(/</g,"\\u003c")})">Copy draft</button>`).join("");$("contentStatus").textContent="Drafts generated. Review claims and personalise before use.";}catch(e){$("contentStatus").textContent=e.message;}finally{b.disabled=false;}};
