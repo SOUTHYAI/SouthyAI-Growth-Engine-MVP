@@ -10,17 +10,22 @@ const BLOCKED = [
   "youtube.com", "tiktok.com", "wikipedia.org", "glassdoor.com", "indeed.com",
   "crunchbase.com", "clutch.co", "g2.com", "capterra.com", "trustpilot.com",
   "reddit.com", "medium.com", "quora.com", "pinterest.com", "gov.za",
-  "yellowpages.co.za", "gumtree.co.za", "bizcommunity.com", "businesstech.co.za"
+  "yellowpages.co.za", "gumtree.co.za", "bizcommunity.com", "businesstech.co.za",
+  "upwork.com", "fiverr.com", "freelancer.com", "forbes.com", "inc.com", "techradar.com"
 ];
 
 // What to search for. Edit these any time to change who it hunts.
 export const SEARCHES = [
-  "call centre outsourcing company South Africa",
-  "customer support outsourcing company Durban Cape Town Johannesburg",
-  "BPO company South Africa contact us",
-  "AI speech data collection company African languages",
-  "voice AI startup needs African language data",
-  "customer service outsourcing company for international businesses"
+  "companies looking to outsource customer support offshore remote team",
+  "offshore customer service outsourcing for US companies",
+  "hire dedicated remote customer support team UK business",
+  "Australian business outsourcing customer support offshore",
+  "ecommerce brand outsourcing customer service to remote agents",
+  "SaaS company outsourcing technical support offshore team",
+  "startup needs 24/7 remote customer support team",
+  "BPO and offshore staffing partnership for international companies",
+  "voice AI company needs African language speech data collection",
+  "remote customer experience team outsourcing partner"
 ];
 
 function hostOf(url) {
@@ -47,8 +52,9 @@ async function searchWeb(env, query) {
 async function draftMessage(env, company, description) {
   const system =
     "You write short, warm, honest B2B outreach messages for SouthyAI Technologies, " +
-    "a South African company offering remote customer service and technical support, " +
-    "and South African speech-data collection and transcription. " +
+    "a South African company that provides fully remote, cloud-based customer service " +
+    "and technical support teams to international businesses, plus South African " +
+    "speech-data collection and transcription. " +
     "Rules: max 90 words. Use ONLY the facts you are given about the prospect; never invent " +
     "details, numbers or compliments you cannot see. No hype, no fake urgency. " +
     "End by inviting a short call and include this booking link: " + BOOKING_LINK + ". " +
