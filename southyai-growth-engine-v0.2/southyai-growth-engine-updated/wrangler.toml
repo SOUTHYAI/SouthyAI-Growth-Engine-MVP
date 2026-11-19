@@ -1,5 +1,5 @@
 name = "southyai-growth-engine-mvp"
-main = "src/worker.js"
+main = "src/index.js"
 compatibility_date = "2026-10-29"
 
 [[d1_databases]]
@@ -7,7 +7,11 @@ binding = "DB"
 database_name = "southyai-growth-engine"
 database_id = "e2ec1886-ae53-4dee-b1f5-857d1b56b041"
 
+[ai]
+binding = "AI"
+
+[triggers]
+crons = ["0 6 * * *"]
+
 [vars]
 APP_NAME = "SouthyAI Growth Engine"
-# Optional: set this in Cloudflare Dashboard > Workers & Pages > Settings > Variables.
-# Do not put private API keys in this file.
