@@ -220,7 +220,12 @@ async function verifySvix(headers, body, secret) {
 
 export async function handleInbound(request, env, ctx) {
   const raw = await request.text();
-  if (!(await verifySvix(request.headers, raw, env.RESEND_WEBHOOK_SECRET))) return new Response("Bad signature", { status: 401 });
+  const secret = String(env.RESEND_WEBHOOK_SECRET || "").trim();
+if (!secret) return new Response("Bad signature: RESEND_WEBHOOK_SECRET is missing on this worker", { status: 401 });
+if (!(await verifySvix(request.headers, raw, secret))) {
+  const age = Math.round(Date.now() / 1000 - Number(request.headers.get("svix-timestamp")));
+  return new Response("Bad signature: secret length " + secret.length + ", message age " + age + "s", { status: 401 });
+}
   let event;
   try { event = JSON.parse(raw); } catch { return new Response("Bad JSON", { status: 400 }); }
   if (event.type === "email.received" && event.data) {
