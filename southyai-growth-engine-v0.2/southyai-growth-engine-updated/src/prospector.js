@@ -1,9 +1,13 @@
 // SouthyAI Growth Engine: automatic prospector
-// Finds businesses via a web search API, asks Cloudflare Workers AI to draft a
-// short personal message for each, and saves them to the leads table as
-// "Draft ready" so you can approve them. It never sends anything by itself.
+// Finds businesses via a web search API, asks Cloudflare Workers AI to write the
+// personal part of an outreach email for each, wraps it in SouthyAI's standard
+// introduction, services and trust details, and saves it to the leads table as
+// "Draft ready" so you can approve it. It never sends anything by itself.
 
 const BOOKING_LINK = "https://calendly.com/southyai-support/30min";
+const LINKEDIN = "https://www.linkedin.com/in/southyai-technologies-7650b0437";
+const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const BACKUP_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
 const BLOCKED = [
   "linkedin.com", "facebook.com", "twitter.com", "x.com", "instagram.com",
@@ -49,25 +53,61 @@ async function searchWeb(env, query) {
   return (data.web && data.web.results) || [];
 }
 
-async function draftMessage(env, company, description) {
+// The AI only writes the personal part (2-3 sentences) about the prospect.
+// Everything else in the email is fixed text, so it is always accurate and consistent.
+async function writeHook(env, company, description) {
   const system =
-    "You write short, warm, honest B2B outreach messages for SouthyAI Technologies, " +
-    "a South African company that provides fully remote, cloud-based customer service " +
-    "and technical support teams to international businesses, plus South African " +
-    "speech-data collection and transcription. " +
-    "Rules: max 90 words. Use ONLY the facts you are given about the prospect; never invent " +
-    "details, numbers or compliments you cannot see. No hype, no fake urgency. " +
-    "End by inviting a short call and include this booking link: " + BOOKING_LINK + ". " +
-    "Sign off as SouthyAI Technologies. Output only the message.";
+    "You write the personal part of a B2B outreach email for SouthyAI Technologies, a South African company " +
+    "that offers fully remote customer service and technical support teams, South African speech data and voice AI, and custom software. " +
+    "Write 2 or 3 sentences only. " +
+    "Sentence 1: show you understand what the prospect company does, using ONLY the facts you are given about them. " +
+    "Sentences 2 and 3: mention a challenge that businesses like theirs commonly face (for example keeping customer support fast and affordable as they grow, " +
+    "or finding quality language data) and say SouthyAI could help. " +
+    "Never invent facts, numbers, names, awards or compliments about the prospect, and never claim to know their current problems. " +
+    "No greeting, no sign-off, no links, no bullet points. Plain text, warm and natural. Output only the 2 or 3 sentences.";
   const user =
     "Prospect company: " + company + "\n" +
     "What their website says: " + (description || "(no description available)") + "\n" +
-    "Write the message.";
-  const out = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+    "Write the 2 or 3 sentences.";
+  const input = {
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
-    max_tokens: 300
-  });
-  return String((out && out.response) || "").trim();
+    max_tokens: 250
+  };
+  for (const model of [MODEL, BACKUP_MODEL]) {
+    try {
+      const out = await env.AI.run(model, input);
+      const text = String((out && out.response) || "")
+        .replace(/https?:\/\/\S+/g, "")
+        .replace(/\s*\n+\s*/g, " ")
+        .trim()
+        .slice(0, 600);
+      if (text.length > 30) return text;
+    } catch { /* try the next model */ }
+  }
+  return "";
+}
+
+function buildDraft(company, hook) {
+  const personal = hook || ("I came across " + company + " and thought SouthyAI could be a helpful partner for your team.");
+  return [
+    "Hello, I'm SouthyAI's AI marketing assistant, reaching out on behalf of SouthyAI Technologies.",
+    "",
+    personal,
+    "",
+    "Here's what SouthyAI does:",
+    "- Fully remote customer service and technical support teams for international businesses",
+    "- Speech data: native-speaker voice recordings, transcription and voice licensing across all 11 official South African languages",
+    "- Voice and language AI assistants that understand South African languages",
+    "- Custom software built around what your business needs",
+    "",
+    "SouthyAI Technologies is a South African company, registered with CIPC and led by its founder, Thandeka Biyela. You can find us on LinkedIn: " + LINKEDIN,
+    "",
+    "If any of this sounds useful, you can book a short 30-minute call here: " + BOOKING_LINK,
+    "",
+    "Kind regards,",
+    "SouthyAI's AI Marketing Assistant",
+    "SouthyAI Technologies"
+  ].join("\n");
 }
 
 export async function runProspecting(env, options = {}) {
@@ -102,8 +142,8 @@ export async function runProspecting(env, options = {}) {
       const description = String(item.description || "").replace(/<[^>]+>/g, "").slice(0, 400);
 
       try {
-        const draft = await draftMessage(env, company, description);
-        if (!draft) { summary.skipped++; continue; }
+        const hook = await writeHook(env, company, description);
+        const draft = buildDraft(company, hook);
         await env.DB.prepare(
           "INSERT INTO leads (company, website, contact_name, contact_email, source_url, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
         ).bind(
