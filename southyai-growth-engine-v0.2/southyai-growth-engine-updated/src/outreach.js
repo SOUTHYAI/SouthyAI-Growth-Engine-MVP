@@ -13,6 +13,11 @@ const KNOWLEDGE = [
   "SouthyAI Technologies is a South African company.",
   "It provides fully remote, cloud-based customer service and technical support teams to international businesses. It has no physical call-centre office; its teams work remotely.",
   "It also builds speech datasets: native-speaker recordings across all 11 official South African languages, accurate transcription, and API licensing.",
+  "SouthyAI Technologies was founded by Thandeka Biyela in South Africa.",
+  "Customer service and technical support: remote agents handle customer queries and tech support for international businesses.",
+  "Speech data: it collects authentic voice recordings from native South African speakers, provides transcription, and licenses voices to AI companies through an API.",
+  "Voice and language AI: it builds AI assistant bots and voice solutions that understand South African languages.",
+  "Contact: support@southyai.co.za and https://southyai.co.za",
   "A 30-minute call can be booked here: " + BOOKING_LINK
 ].join("\n");
 
@@ -266,7 +271,7 @@ export function parseDecision(raw) {
     const reply = String(j.reply || "").trim();
     if (!action || !reply || reply.length > 1200) return null;
     const urls = reply.match(/https?:\/\/\S+/g) || [];
-    if (urls.some(u => !u.startsWith(BOOKING_LINK))) return null;
+    if (urls.some(u => !(u.startsWith(BOOKING_LINK) || u.startsWith("https://southyai.co.za")))) return null;
     return { action, reply };
   } catch { return null; }
 }
@@ -278,7 +283,8 @@ async function decide(env, convId, latest) {
     "If the prospect asks about anything not in FACTS (pricing, contracts, legal or privacy terms, specific capabilities, availability), is upset or confused, or asks for a human, choose handover. " +
     "If they ask whether you are a bot or an AI, say plainly that you are SouthyAI's AI assistant and that a person from the team can follow up. " +
     "If they show interest, invite them to book a call using the booking link in FACTS. " +
-    "Keep replies under 90 words, warm, plain text, no hype. " +
+    "Keep replies under 150 words, warm, plain text, no hype. " +
+    "If they ask what SouthyAI does, give a clear overview covering every service in FACTS, in short paragraphs, and end by inviting them to book a call. " +
     "Output ONLY valid JSON: {\"action\":\"reply\",\"reply\":\"...\"} or {\"action\":\"handover\",\"reply\":\"a short honest holding message saying a person from the team will come back to them\"}";
   const user = "FACTS:\n" + KNOWLEDGE + "\n\nCONVERSATION SO FAR:\n" + (await history(env, convId)) + "\n\nLATEST MESSAGE FROM PROSPECT:\n" + latest;
   lastDebug = "";
