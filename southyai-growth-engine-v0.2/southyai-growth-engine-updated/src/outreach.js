@@ -4,7 +4,8 @@
 // - Hands anything it is unsure about to a human (you)
 
 const BOOKING_LINK = "https://calendly.com/southyai-support/30min";
-const MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const BACKUP_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 const MAX_AI_TURNS = 4;
 const DEFAULT_FROM = "SouthyAI <ai@mail.southyai.co.za>";
 
@@ -282,11 +283,16 @@ async function decide(env, convId, latest) {
   const user = "FACTS:\n" + KNOWLEDGE + "\n\nCONVERSATION SO FAR:\n" + (await history(env, convId)) + "\n\nLATEST MESSAGE FROM PROSPECT:\n" + latest;
   lastDebug = "";
   let out;
+  const input = { messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: 350 };
   try {
-    out = await env.AI.run(MODEL, { messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: 350 });
-  } catch (e) {
-    lastDebug = "AI call failed: " + (e && e.message ? e.message : String(e));
-    return null;
+    out = await env.AI.run(MODEL, input);
+  } catch (e1) {
+    try {
+      out = await env.AI.run(BACKUP_MODEL, input);
+    } catch (e2) {
+      lastDebug = "AI call failed: " + (e2 && e2.message ? e2.message : String(e2));
+      return null;
+    }
   }
   let raw = out && out.response;
   if (raw && typeof raw === "object") raw = JSON.stringify(raw);
