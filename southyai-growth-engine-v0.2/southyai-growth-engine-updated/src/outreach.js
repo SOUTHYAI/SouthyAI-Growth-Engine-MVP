@@ -15,6 +15,7 @@ const KNOWLEDGE = [
   "A 30-minute call can be booked here: " + BOOKING_LINK
 ].join("\n");
 
+let lastDebug = "";
 const nowIso = () => new Date().toISOString();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -259,7 +260,7 @@ export function parseDecision(raw) {
   const a = s.indexOf("{"), b = s.lastIndexOf("}");
   if (a < 0 || b <= a) return null;
   try {
-    const j = JSON.parse(s.slice(a, b + 1));
+    const j = JSON.parse(s.slice(a, b + 1).replace(/[\r\n]+/g, " "));
     const action = j.action === "reply" ? "reply" : j.action === "handover" ? "handover" : null;
     const reply = String(j.reply || "").trim();
     if (!action || !reply || reply.length > 1200) return null;
@@ -279,10 +280,19 @@ async function decide(env, convId, latest) {
     "Keep replies under 90 words, warm, plain text, no hype. " +
     "Output ONLY valid JSON: {\"action\":\"reply\",\"reply\":\"...\"} or {\"action\":\"handover\",\"reply\":\"a short honest holding message saying a person from the team will come back to them\"}";
   const user = "FACTS:\n" + KNOWLEDGE + "\n\nCONVERSATION SO FAR:\n" + (await history(env, convId)) + "\n\nLATEST MESSAGE FROM PROSPECT:\n" + latest;
+  lastDebug = "";
+  let out;
   try {
-    const out = await env.AI.run(MODEL, { messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: 350 });
-    return parseDecision(out && out.response);
-  } catch { return null; }
+    out = await env.AI.run(MODEL, { messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: 350 });
+  } catch (e) {
+    lastDebug = "AI call failed: " + (e && e.message ? e.message : String(e));
+    return null;
+  }
+  let raw = out && out.response;
+  if (raw && typeof raw === "object") raw = JSON.stringify(raw);
+  const d = parseDecision(raw);
+  if (!d) lastDebug = "AI answer could not be used: " + String(raw).slice(0, 400);
+  return d;
 }
 
 async function notifyOwner(env, conv, text, why) {
@@ -329,9 +339,14 @@ export async function processInbound(env, data) {
 
   if (conv.status !== "Active") { await notifyOwner(env, conv, text, "New message in a conversation waiting for you"); return; }
 
+  lastDebug = "";
   let decision = null;
   if (conv.ai_turns < MAX_AI_TURNS) decision = await decide(env, conv.id, text);
-  if (!decision) decision = { action: "handover", reply: "Thanks for your message. I'm passing this to a person on our team, who will come back to you personally." };
+  if (!decision) {
+    decision = { action: "handover", reply: "Thanks for your message. I'm passing this to a person on our team, who will come back to you personally." };
+    // Test conversations only (no lead attached): show why the AI could not answer.
+    if (!conv.lead_id && lastDebug) decision.reply += "\n\n[test info: " + lastDebug + "]";
+  }
 
   const id = await sendViaResend(env, { to: sender, subject: reSubject, text: decision.reply + "\n\n-- SouthyAI's AI assistant", inReplyTo });
   await addMessage(env, conv.id, "out", "reply", decision.reply, id);
