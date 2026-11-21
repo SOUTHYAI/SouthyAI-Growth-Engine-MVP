@@ -221,11 +221,13 @@ async function verifySvix(headers, body, secret) {
 export async function handleInbound(request, env, ctx) {
   const raw = await request.text();
   const secret = String(env.RESEND_WEBHOOK_SECRET || "").trim();
-if (!secret) return new Response("Bad signature: RESEND_WEBHOOK_SECRET is missing on this worker", { status: 401 });
-if (!(await verifySvix(request.headers, raw, secret))) {
-  const age = Math.round(Date.now() / 1000 - Number(request.headers.get("svix-timestamp")));
-  return new Response("Bad signature: secret length " + secret.length + ", message age " + age + "s", { status: 401 });
-}
+  if (!secret) return new Response("Bad signature: RESEND_WEBHOOK_SECRET is missing on this worker", { status: 401 });
+  if (!secret.startsWith("whsec_")) {
+    return new Response("Bad signature: the saved secret does not start with whsec_ (it starts with " + secret.slice(0, 4) + "), length " + secret.length, { status: 401 });
+  }
+  if (!(await verifySvix(request.headers, raw, secret))) {
+    return new Response("Bad signature: the secret starts with whsec_ (length " + secret.length + ") but did not match this message", { status: 401 });
+  }
   let event;
   try { event = JSON.parse(raw); } catch { return new Response("Bad JSON", { status: 400 }); }
   if (event.type === "email.received" && event.data) {
