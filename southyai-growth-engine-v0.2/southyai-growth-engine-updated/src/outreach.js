@@ -17,6 +17,11 @@ const KNOWLEDGE = [
   "Customer service and technical support: remote agents handle customer queries and tech support for international businesses.",
   "Speech data: it collects authentic voice recordings from native South African speakers, provides transcription, and licenses voices to AI companies through an API.",
   "Voice and language AI: it builds AI assistant bots and voice solutions that understand South African languages.",
+  "Custom software: it can also build custom software for clients who need it, and more details about this will be added to the website soon.",
+  "Where it is from: SouthyAI Technologies is based in South Africa.",
+  "Owner: SouthyAI Technologies is owned and led by its founder, Thandeka Biyela.",
+  "Registration: SouthyAI Technologies is a registered company with the Companies and Intellectual Property Commission (CIPC) in South Africa. The registration number is not shared by the assistant; if someone asks for it, hand over to a person.",
+  "LinkedIn: https://www.linkedin.com/in/southyai-technologies-7650b0437",
   "Contact: support@southyai.co.za and https://southyai.co.za",
   "A 30-minute call can be booked here: " + BOOKING_LINK
 ].join("\n");
@@ -271,17 +276,19 @@ export function parseDecision(raw) {
     const reply = String(j.reply || "").trim();
     if (!action || !reply || reply.length > 1200) return null;
     const urls = reply.match(/https?:\/\/\S+/g) || [];
-    if (urls.some(u => !(u.startsWith(BOOKING_LINK) || u.startsWith("https://southyai.co.za")))) return null;
+    if (urls.some(u => !(u.startsWith(BOOKING_LINK) || u.startsWith("https://southyai.co.za") || u.startsWith("https://www.linkedin.com/in/southyai-technologies-7650b0437")))) return null;
     return { action, reply };
   } catch { return null; }
 }
 
 async function decide(env, convId, latest) {
   const system =
-    "You are SouthyAI's AI assistant, replying by email to a business prospect on behalf of SouthyAI Technologies. " +
+    "You are SouthyAI's AI marketing assistant, replying by email to a business prospect on behalf of SouthyAI Technologies. " +
+    "Sound friendly, personal and persuasive, like a good marketer: pick up on what the prospect said about their own business and connect it to the services in FACTS. You are an AI and never pretend to be a human employee. " +
     "You may ONLY state facts from the FACTS list. Never invent prices, team sizes, years of experience, clients, certifications, guarantees or timelines. " +
     "If the prospect asks about anything not in FACTS (pricing, contracts, legal or privacy terms, specific capabilities, availability), is upset or confused, or asks for a human, choose handover. " +
     "If they ask whether you are a bot or an AI, say plainly that you are SouthyAI's AI assistant and that a person from the team can follow up. " +
+    "If they ask where the company is from, who owns it, or whether it is registered, answer plainly from FACTS, and share the LinkedIn link when they want to check the company out. Never give out a registration number. " +
     "If they show interest, invite them to book a call using the booking link in FACTS. " +
     "Keep replies under 150 words, warm, plain text, no hype. " +
     "If they ask what SouthyAI does, give a clear overview covering every service in FACTS, in short paragraphs, and end by inviting them to book a call. " +
