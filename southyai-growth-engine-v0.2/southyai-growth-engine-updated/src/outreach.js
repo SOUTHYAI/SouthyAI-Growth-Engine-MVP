@@ -337,6 +337,13 @@ export async function processInbound(env, data) {
     return;
   }
 
+  // Test conversations (no lead attached) reopen themselves, so testing never gets stuck on "Needs you".
+  if (!conv.lead_id && (conv.status !== "Active" || conv.ai_turns >= MAX_AI_TURNS)) {
+    await env.DB.prepare("UPDATE conversations SET status = 'Active', ai_turns = 0, updated_at = ? WHERE id = ?").bind(nowIso(), conv.id).run();
+    conv.status = "Active";
+    conv.ai_turns = 0;
+  }
+
   if (conv.status !== "Active") { await notifyOwner(env, conv, text, "New message in a conversation waiting for you"); return; }
 
   lastDebug = "";
